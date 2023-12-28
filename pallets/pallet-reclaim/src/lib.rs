@@ -3,7 +3,7 @@
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
 	pallet_prelude::ConstU32,
-	sp_io::crypto::secp256k1_ecdsa_recover_compressed,
+	sp_io::{crypto::secp256k1_ecdsa_recover_compressed, hashing::keccak_256},
 	sp_runtime::{
 		traits::{IdentifyAccount, Verify},
 		BoundedVec, SaturatedConversion,
@@ -20,7 +20,6 @@ use scale_info::prelude::{
 };
 use sha2::{Digest, Sha256};
 use sp_core::ecdsa;
-use frame_support::sp_io::hashing::keccak_256;
 pub use weights::WeightInfo;
 
 #[cfg(test)]
@@ -108,9 +107,7 @@ fn generate_random_seed(bytes: Vec<u8>, offset: usize) -> u32 {
 	seed
 }
 
-#[derive(
-	Encode, Decode, Eq, PartialEq, Clone, PartialOrd, Ord, scale_info::TypeInfo, Debug,
-)]
+#[derive(Encode, Decode, Eq, PartialEq, Clone, PartialOrd, Ord, scale_info::TypeInfo, Debug)]
 pub struct ClaimInfo {
 	pub provider: String,
 	pub parameters: String,
@@ -127,9 +124,7 @@ impl ClaimInfo {
 	}
 }
 
-#[derive(
-	Encode, Decode, Eq, PartialEq, Clone, PartialOrd, Ord, scale_info::TypeInfo, Debug,
-)]
+#[derive(Encode, Decode, Eq, PartialEq, Clone, PartialOrd, Ord, scale_info::TypeInfo, Debug)]
 pub struct CompleteClaimData {
 	pub identifier: Vec<u8>,
 	pub owner: ecdsa::Public,
