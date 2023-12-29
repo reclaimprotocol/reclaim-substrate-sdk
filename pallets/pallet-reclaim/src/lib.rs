@@ -72,7 +72,7 @@ impl Witness {
 		for wit in witness {
 			vec_addresses.push(wit.address);
 		}
-		return vec_addresses
+		vec_addresses
 	}
 }
 
@@ -118,9 +118,8 @@ impl ClaimInfo {
 	pub fn hash(&self) -> Vec<u8> {
 		let mut hasher = Sha256::new();
 		let hash_str = format!("{}\n{}\n{}", &self.provider, &self.parameters, &self.context);
-		hasher.update(hash_str.as_bytes().to_vec());
-		let result = hasher.finalize().to_vec();
-		result
+		hasher.update(hash_str.as_bytes());
+		hasher.finalize().to_vec()
 	}
 }
 
@@ -137,7 +136,7 @@ impl CompleteClaimData {
 		let hash_str = format!(
 			"{}\n{}\n{}\n{}",
 			hex::encode(&self.identifier),
-			hex::encode(&self.owner),
+			hex::encode(self.owner),
 			&self.timestamp_s.to_string(),
 			&self.epoch.to_string()
 		);
@@ -152,7 +151,7 @@ pub struct SignedClaim {
 }
 
 impl SignedClaim {
-	pub fn recover_signers_of_signed_claim(self) -> Result<Vec<ecdsa::Public>, ()> {
+	pub fn recover_signers_of_signed_claim(self) -> Vec<ecdsa::Public> {
 		let mut expected = vec![];
 		let mut hasher = Sha256::new();
 		let serialised_claim = self.claim.serialise();
@@ -165,7 +164,7 @@ impl SignedClaim {
 				expected.push(recovered.into_account());
 			}
 		}
-		Ok(expected)
+		expected
 	}
 }
 
@@ -178,9 +177,9 @@ pub fn fetch_witness_for_claim(
 	let hash_str = format!(
 		"{}\n{}\n{}\n{}",
 		hex::encode(identifier),
-		epoch.minimum_witness_for_claim_creation.to_string(),
-		claim_timestamp.to_string(),
-		epoch.id.to_string()
+		epoch.minimum_witness_for_claim_creation,
+		claim_timestamp,
+		epoch.id
 	);
 	let result = hash_str.as_bytes().to_vec();
 	let mut hasher = Sha256::new();
@@ -189,14 +188,13 @@ pub fn fetch_witness_for_claim(
 	let witenesses_left_list = epoch.witness;
 	let mut byte_offset = 0;
 	let witness_left = witenesses_left_list.len();
-	for _i in 0..epoch.minimum_witness_for_claim_creation.into() {
+	for _i in 0..epoch.minimum_witness_for_claim_creation {
 		let random_seed = generate_random_seed(hash_result.clone(), byte_offset) as usize;
 		let witness_index = random_seed % witness_left;
 		let witness = witenesses_left_list.get(witness_index);
-		match witness {
-			Some(data) => selected_witness.push(data.clone()),
-			None => {},
-		}
+		if let Some(data) = witness {
+			selected_witness.push(data.clone())
+		};
 		byte_offset = (byte_offset + 4) % hash_result.len();
 	}
 
@@ -270,7 +268,7 @@ pub mod pallet {
 			let _who = ensure_signed(origin)?;
 			let config = <PReclaimConfig<T>>::get().unwrap();
 			let epoch_count = config.current_epoch;
-			let current_epoch = <Epochs<T>>::get(&epoch_count);
+			let current_epoch = <Epochs<T>>::get(epoch_count);
 			let hashed = claim_info.hash();
 
 			ensure!(signed_claim.claim.identifier == hashed, Error::<T>::HashMismatch);
@@ -282,7 +280,7 @@ pub mod pallet {
 
 			let expected_witness_addresses = Witness::get_addresses(expected_witness);
 
-			let signed_witness = signed_claim.recover_signers_of_signed_claim().unwrap();
+			let signed_witness = signed_claim.recover_signers_of_signed_claim();
 			ensure!(
 				expected_witness_addresses.len() == signed_witness.len(),
 				Error::<T>::LengthMismatch
