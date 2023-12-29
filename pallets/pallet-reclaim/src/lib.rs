@@ -242,6 +242,9 @@ pub mod pallet {
 	pub enum Error<T> {
 		OnlyOwner,
 		AlreadyInitialized,
+		HashMismatch,
+		LengthMismatch,
+		SignatureMismatch,
 	}
 
 	#[pallet::call]
@@ -269,10 +272,8 @@ pub mod pallet {
 			let epoch_count = config.current_epoch;
 			let current_epoch = <Epochs<T>>::get(&epoch_count);
 			let hashed = claim_info.hash();
-			if signed_claim.claim.identifier != hashed {
-				return Err(DispatchError::Other("Hashes mismatch"))
-			}
 
+			ensure!(signed_claim.claim.identifier == hashed, Error::<T>::HashMismatch);
 			let expected_witness = fetch_witness_for_claim(
 				current_epoch.clone(),
 				signed_claim.claim.identifier.clone(),
@@ -282,15 +283,16 @@ pub mod pallet {
 			let expected_witness_addresses = Witness::get_addresses(expected_witness);
 
 			let signed_witness = signed_claim.recover_signers_of_signed_claim().unwrap();
-
-			if expected_witness_addresses.len() != signed_witness.len() {
-				return Err(DispatchError::Other("Length mismatch"))
-			}
+			ensure!(
+				expected_witness_addresses.len() == signed_witness.len(),
+				Error::<T>::LengthMismatch
+			);
 
 			for signed in signed_witness {
-				if !expected_witness_addresses.contains(&signed) {
-					return Err(DispatchError::Other("Signature mismatch"))
-				}
+				ensure!(
+					expected_witness_addresses.contains(&signed),
+					Error::<T>::SignatureMismatch
+				);
 			}
 			Self::deposit_event(Event::ProofVerified { epoch_id: current_epoch.id });
 
