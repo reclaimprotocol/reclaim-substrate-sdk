@@ -22,7 +22,17 @@ Run node dev
 ./target/release/node-template --dev
 ```
 
+## Frontend
+
+While the above command is running in a separate terminal, hit the following to launch the interface
+```bash
+cd substrate-front-end-template
+yarn install
+yarn start
+```
+
 ## Benchmarking
+
 Build
 ```bash
 cargo build --release --features runtime-benchmarks
