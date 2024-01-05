@@ -50,10 +50,24 @@ impl<T: frame_system::Config> pallet_reclaim::WeightInfo for WeightInfo<T> {
 	}
 
 fn verify_proof() -> Weight {
-        todo!()
+        // Proof Size summary in bytes:
+		//  Measured:  `3`
+		//  Estimated: `1533`
+		// Minimum execution time: 7_000_000 picoseconds.
+		Weight::from_parts(8_000_000, 0)
+		.saturating_add(Weight::from_parts(0, 1533))
+		.saturating_add(T::DbWeight::get().reads(1))
+		.saturating_add(T::DbWeight::get().writes(1))
     }
 
 fn add_epoch() -> Weight {
-        todo!()
+        // Proof Size summary in bytes:
+		//  Measured:  `3`
+		//  Estimated: `1533`
+		// Minimum execution time: 7_000_000 picoseconds.
+		Weight::from_parts(8_000_000, 0)
+		.saturating_add(Weight::from_parts(0, 1533))
+		.saturating_add(T::DbWeight::get().reads(1))
+		.saturating_add(T::DbWeight::get().writes(1))
     }
 }

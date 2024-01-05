@@ -61,11 +61,13 @@ fn should_approve_valid_proofs() {
 			minimum_witness
 		));
 		let claim_info = ClaimInfo {
-			provider: "uid-dob".to_string(),
-			parameters: "{\"dob\":\"0000-00-00\"}".to_string(),
-			context: "some-application-specific-context".to_string(),
+			provider: "provider".to_string(),
+			parameters: "{}".to_string(),
+			context: "context".to_string(),
 		};
 		let hashed = claim_info.hash();
+		dbg!(&hex::encode(&hashed));
+
 		let now = Timestamp::get().saturated_into::<u128>();
 		let complete_claim_data = CompleteClaimData {
 			identifier: hashed,
@@ -81,6 +83,7 @@ fn should_approve_valid_proofs() {
 		let hash = keccak_256(&result);
 		let signature = pair.sign_prehashed(&hash);
 		sigs.push(signature.0);
+		dbg!(hex::encode(&sigs[0]));
 		let signed_claim = SignedClaim { claim: complete_claim_data, bytes: sigs };
 
 		assert_ok!(Reclaim::verify_proof(
