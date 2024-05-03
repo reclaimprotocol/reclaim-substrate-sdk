@@ -1,9 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+#![allow(non_snake_case)]
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
 	pallet_prelude::ConstU32,
-	sp_io::{crypto::secp256k1_ecdsa_recover_compressed, hashing::keccak_256},
 	sp_runtime::{
 		traits::{IdentifyAccount, Verify},
 		BoundedVec, SaturatedConversion,
@@ -18,10 +18,13 @@ use scale_info::prelude::{
 	vec,
 	vec::Vec,
 };
-use sha2::{Digest, Sha256};
-use sp_core::ecdsa;
 pub use weights::WeightInfo;
 
+use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
+use sha2::Sha256;
+use sha3::{Digest, Keccak256};
+
+use crate::identity_digest::Identity256;
 #[cfg(test)]
 mod mock;
 
@@ -31,6 +34,8 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 pub mod weights;
+
+mod identity_digest;
 
 #[derive(
 	Encode,
@@ -46,7 +51,7 @@ pub mod weights;
 )]
 pub struct ReclaimConfig<AccountId> {
 	pub owner: AccountId,
-	pub current_epoch: u128,
+	pub current_epoch: u64,
 }
 
 #[derive(
@@ -62,15 +67,15 @@ pub struct ReclaimConfig<AccountId> {
 	Debug,
 )]
 pub struct Witness {
-	pub address: ecdsa::Public,
+	pub address: [u8; 20],
 	pub host: [u8; 32],
 }
 
 impl Witness {
-	pub fn get_addresses(witness: Vec<Witness>) -> Vec<ecdsa::Public> {
+	pub fn get_addresses(witness: Vec<Witness>) -> Vec<String> {
 		let mut vec_addresses = vec![];
 		for wit in witness {
-			vec_addresses.push(wit.address);
+			vec_addresses.push(hex::encode(wit.address));
 		}
 		vec_addresses
 	}
@@ -90,7 +95,7 @@ impl Witness {
 	Debug,
 )]
 pub struct Epoch {
-	pub id: u128,
+	pub id: u64,
 	pub timestamp_start: u64,
 	pub timestamp_end: u64,
 	pub minimum_witness_for_claim_creation: u128,
@@ -115,71 +120,110 @@ pub struct ClaimInfo {
 }
 
 impl ClaimInfo {
-	pub fn hash(&self) -> Vec<u8> {
-		let mut hasher = Sha256::new();
+	pub fn hash(&self) -> String {
+		let mut hasher = Keccak256::new();
 		let hash_str = format!("{}\n{}\n{}", &self.provider, &self.parameters, &self.context);
-		hasher.update(hash_str.as_bytes());
-		hasher.finalize().to_vec()
+		hasher.update(&hash_str);
+
+		let hash = hasher.finalize().to_vec();
+		append_0x(hex::encode(hash).as_str())
 	}
 }
 
 #[derive(Encode, Decode, Eq, PartialEq, Clone, PartialOrd, Ord, scale_info::TypeInfo, Debug)]
 pub struct CompleteClaimData {
-	pub identifier: Vec<u8>,
-	pub owner: ecdsa::Public,
-	pub epoch: u128,
-	pub timestamp_s: u128,
+	pub identifier: String,
+	pub owner: String,
+	pub epoch: u64,
+	pub timestampS: u64,
 }
 
 impl CompleteClaimData {
-	pub fn serialise(&self) -> Vec<u8> {
-		let hash_str = format!(
+	pub fn serialise(&self) -> String {
+		format!(
 			"{}\n{}\n{}\n{}",
-			hex::encode(&self.identifier),
-			hex::encode(self.owner),
-			&self.timestamp_s.to_string(),
+			&self.identifier,
+			&self.owner.to_string(),
+			&self.timestampS.to_string(),
 			&self.epoch.to_string()
-		);
-		hash_str.as_bytes().to_vec()
+		)
 	}
 }
 
 #[derive(Encode, Decode, Eq, PartialEq, Clone, scale_info::TypeInfo, Debug)]
 pub struct SignedClaim {
 	pub claim: CompleteClaimData,
-	pub bytes: Vec<[u8; 65]>,
+	pub signatures: Vec<String>,
 }
 
 impl SignedClaim {
-	pub fn recover_signers_of_signed_claim(self) -> Vec<ecdsa::Public> {
+	pub fn recover_signers_of_signed_claim(self) -> Vec<Vec<u8>> {
+		// use crate::claims::identity_digest::Identity256;
+		use digest::Update;
+		// Create empty array
 		let mut expected = vec![];
-		let mut hasher = Sha256::new();
+		// Hash the signature
 		let serialised_claim = self.claim.serialise();
-		hasher.update(serialised_claim);
-		let result = hasher.finalize().to_vec();
-		let hash = keccak_256(&result);
-		for signature in self.bytes {
-			if let Ok(recovered_raw) = secp256k1_ecdsa_recover_compressed(&signature, &hash) {
-				let recovered = ecdsa::Public::from_raw(recovered_raw);
-				expected.push(recovered.into_account());
-			}
+
+		let bm = keccak256_eth(serialised_claim.as_str());
+		let message_hash = bm.to_vec();
+
+		// For each signature in the claim
+		for complete_signature in self.signatures {
+			// complete_signature.remove(0);
+			// complete_signature.remove(0);
+			let rec_param = complete_signature
+				.get((complete_signature.len() as usize - 2)..(complete_signature.len() as usize))
+				.unwrap();
+			let mut mut_sig_str = complete_signature.clone();
+			mut_sig_str.pop();
+			mut_sig_str.pop();
+
+			let rec_dec = hex::decode(rec_param).unwrap();
+			let rec_norm = rec_dec.first().unwrap() - 27;
+			let r_s = hex::decode(mut_sig_str).unwrap();
+
+			let id = match rec_norm {
+				0 => RecoveryId::new(false, false),
+				1 => RecoveryId::new(true, false),
+				2_u8..=u8::MAX => todo!(),
+			};
+
+			let signature = Signature::from_bytes(r_s.as_slice().into()).unwrap();
+			let message_digest = Identity256::new().chain(&message_hash);
+
+			// Recover the public key
+			let verkey = VerifyingKey::recover_from_digest(message_digest, &signature, id).unwrap();
+			let key: Vec<u8> = verkey.to_encoded_point(false).as_bytes().into();
+			let hasher = Keccak256::new_with_prefix(&key[1..]);
+
+			let hash = hasher.finalize().to_vec();
+
+			let address_bytes = hash.get(12..).unwrap();
+			let public_key = &hex::encode(address_bytes);
+			let dec_public_key = hex::decode(public_key).unwrap();
+			expected.push(dec_public_key);
 		}
 		expected
 	}
 }
 
-pub fn fetch_witness_for_claim(
-	epoch: Epoch,
-	identifier: Vec<u8>,
-	claim_timestamp: u128,
-) -> Vec<Witness> {
+#[derive(Encode, Decode, Eq, PartialEq, Clone, scale_info::TypeInfo, Debug)]
+pub struct Proof {
+	pub claimInfo: ClaimInfo,
+	pub signedClaim: SignedClaim,
+}
+
+pub fn fetch_witness_for_claim(epoch: Epoch, identifier: String, timestamp: u64) -> Vec<Witness> {
 	let mut selected_witness = vec![];
+
+	// Create a hash from identifier+epoch+minimum+timestamp
 	let hash_str = format!(
 		"{}\n{}\n{}\n{}",
 		hex::encode(identifier),
-		epoch.minimum_witness_for_claim_creation,
-		claim_timestamp,
-		epoch.id
+		epoch.minimum_witness_for_claim_creation.to_string(),
+		timestamp.to_string(),
+		epoch.id.to_string()
 	);
 	let result = hash_str.as_bytes().to_vec();
 	let mut hasher = Sha256::new();
@@ -188,17 +232,36 @@ pub fn fetch_witness_for_claim(
 	let witenesses_left_list = epoch.witness;
 	let mut byte_offset = 0;
 	let witness_left = witenesses_left_list.len();
-	for _i in 0..epoch.minimum_witness_for_claim_creation {
+	for _i in 0..epoch.minimum_witness_for_claim_creation.into() {
 		let random_seed = generate_random_seed(hash_result.clone(), byte_offset) as usize;
 		let witness_index = random_seed % witness_left;
 		let witness = witenesses_left_list.get(witness_index);
-		if let Some(data) = witness {
-			selected_witness.push(data.clone())
-		};
+		match witness {
+			Some(data) => selected_witness.push(data.clone()),
+			None => {},
+		}
 		byte_offset = (byte_offset + 4) % hash_result.len();
 	}
 
 	selected_witness
+}
+
+pub fn append_0x(content: &str) -> String {
+	let mut initializer = String::from("0x");
+	initializer.push_str(content);
+	initializer
+}
+
+pub fn keccak256_eth(message: &str) -> Vec<u8> {
+	let message: &[u8] = message.as_ref();
+
+	let mut eth_message = format!("\x19Ethereum Signed Message:\n{}", message.len()).into_bytes();
+	eth_message.extend_from_slice(message);
+	let mut hasher = Keccak256::new();
+	hasher.update(&eth_message);
+
+	let hash = hasher.finalize().to_vec();
+	hash
 }
 
 #[frame_support::pallet]
@@ -226,14 +289,14 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn epochs)]
-	pub(super) type Epochs<T: Config> = StorageMap<_, Blake2_128Concat, u128, Epoch, ValueQuery>;
+	pub(super) type Epochs<T: Config> = StorageMap<_, Blake2_128Concat, u64, Epoch, ValueQuery>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		ContractInitialized { owner: T::AccountId },
-		ProofVerified { epoch_id: u128 },
-		EpochAdded { epoch_id: u128 },
+		ProofVerified { epoch_id: u64 },
+		EpochAdded { epoch_id: u64 },
 	}
 
 	#[pallet::error]
@@ -252,7 +315,7 @@ pub mod pallet {
 		pub fn init(origin: OriginFor<T>) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 			ensure!(!<PReclaimConfig<T>>::exists(), Error::<T>::AlreadyInitialized);
-			let reclaim_config = ReclaimConfig { owner: who.clone(), current_epoch: 0_u128 };
+			let reclaim_config = ReclaimConfig { owner: who.clone(), current_epoch: 0_u64 };
 			<PReclaimConfig<T>>::put(reclaim_config);
 			Self::deposit_event(Event::ContractInitialized { owner: who });
 			Ok(())
@@ -275,7 +338,7 @@ pub mod pallet {
 			let expected_witness = fetch_witness_for_claim(
 				current_epoch.clone(),
 				signed_claim.claim.identifier.clone(),
-				signed_claim.claim.timestamp_s,
+				signed_claim.claim.timestampS,
 			);
 
 			let expected_witness_addresses = Witness::get_addresses(expected_witness);
@@ -288,7 +351,7 @@ pub mod pallet {
 
 			for signed in signed_witness {
 				ensure!(
-					expected_witness_addresses.contains(&signed),
+					expected_witness_addresses.contains(&hex::encode(signed)),
 					Error::<T>::SignatureMismatch
 				);
 			}
@@ -308,7 +371,7 @@ pub mod pallet {
 			let config = <PReclaimConfig<T>>::get().unwrap();
 			let owner = config.owner;
 			ensure!(who == owner, Error::<T>::OnlyOwner);
-			let new_epoch_id = config.current_epoch + 1_u128;
+			let new_epoch_id = config.current_epoch + 1_u64;
 			let now = timestamp::Pallet::<T>::get().saturated_into::<u64>();
 			let epoch = Epoch {
 				id: new_epoch_id,
