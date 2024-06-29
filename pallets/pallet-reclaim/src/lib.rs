@@ -1,8 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-#![allow(non_snake_case)]
+#![allow(non_snake_case, unused_imports)]
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
+	dispatch::DispatchResult,
+	ensure,
 	pallet_prelude::ConstU32,
 	sp_runtime::{
 		traits::{IdentifyAccount, Verify},
@@ -11,13 +13,7 @@ use frame_support::{
 };
 pub use pallet::*;
 use pallet_timestamp::{self as timestamp};
-use scale_info::prelude::{
-	fmt::Debug,
-	format,
-	string::{String, ToString},
-	vec,
-	vec::Vec,
-};
+use scale_info::prelude::{fmt::Debug, format, string::String, vec, vec::Vec};
 pub use weights::WeightInfo;
 
 use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
@@ -35,7 +31,11 @@ mod tests;
 mod benchmarking;
 pub mod weights;
 
+pub mod traits;
+
 mod identity_digest;
+
+use traits::ReclaimVerifier;
 
 #[derive(
 	Encode,
@@ -140,13 +140,7 @@ pub struct CompleteClaimData {
 
 impl CompleteClaimData {
 	pub fn serialise(&self) -> String {
-		format!(
-			"{}\n{}\n{}\n{}",
-			&self.identifier,
-			&self.owner.to_string(),
-			&self.timestampS.to_string(),
-			&self.epoch.to_string()
-		)
+		format!("{}\n{}\n{}\n{}", &self.identifier, &self.owner, &self.timestampS, &self.epoch)
 	}
 }
 
@@ -221,9 +215,9 @@ pub fn fetch_witness_for_claim(epoch: Epoch, identifier: String, timestamp: u64)
 	let hash_str = format!(
 		"{}\n{}\n{}\n{}",
 		hex::encode(identifier),
-		epoch.minimum_witness_for_claim_creation.to_string(),
-		timestamp.to_string(),
-		epoch.id.to_string()
+		epoch.minimum_witness_for_claim_creation,
+		timestamp,
+		epoch.id
 	);
 	let result = hash_str.as_bytes().to_vec();
 	let mut hasher = Sha256::new();
@@ -332,31 +326,10 @@ pub mod pallet {
 			let config = <PReclaimConfig<T>>::get().unwrap();
 			let epoch_count = config.current_epoch;
 			let current_epoch = <Epochs<T>>::get(epoch_count);
-			let hashed = claim_info.hash();
 
-			ensure!(signed_claim.claim.identifier == hashed, Error::<T>::HashMismatch);
-			let expected_witness = fetch_witness_for_claim(
-				current_epoch.clone(),
-				signed_claim.claim.identifier.clone(),
-				signed_claim.claim.timestampS,
-			);
-
-			let expected_witness_addresses = Witness::get_addresses(expected_witness);
-
-			let signed_witness = signed_claim.recover_signers_of_signed_claim();
-			ensure!(
-				expected_witness_addresses.len() == signed_witness.len(),
-				Error::<T>::LengthMismatch
-			);
-
-			for signed in signed_witness {
-				ensure!(
-					expected_witness_addresses.contains(&hex::encode(signed)),
-					Error::<T>::SignatureMismatch
-				);
-			}
+			let proof = Proof { claimInfo: claim_info, signedClaim: signed_claim };
+			<Self as ReclaimVerifier<Proof, Epoch>>::verify_proof(&proof, &current_epoch)?;
 			Self::deposit_event(Event::ProofVerified { epoch_id: current_epoch.id });
-
 			Ok(())
 		}
 
@@ -387,5 +360,38 @@ pub mod pallet {
 
 			Ok(())
 		}
+	}
+}
+
+impl<T> ReclaimVerifier<Proof, Epoch> for Pallet<T>
+where
+	T: Config,
+{
+	fn verify_proof(proof: &Proof, current_epoch: &Epoch) -> DispatchResult {
+		let signed_claim = proof.signedClaim.clone();
+		let hashed = proof.claimInfo.hash();
+
+		ensure!(signed_claim.claim.identifier == hashed, Error::<T>::HashMismatch);
+		let expected_witness = fetch_witness_for_claim(
+			current_epoch.clone(),
+			signed_claim.claim.identifier.clone(),
+			signed_claim.claim.timestampS,
+		);
+
+		let expected_witness_addresses = Witness::get_addresses(expected_witness);
+
+		let signed_witness = signed_claim.recover_signers_of_signed_claim();
+		ensure!(
+			expected_witness_addresses.len() == signed_witness.len(),
+			Error::<T>::LengthMismatch
+		);
+
+		for signed in signed_witness {
+			ensure!(
+				expected_witness_addresses.contains(&hex::encode(signed)),
+				Error::<T>::SignatureMismatch
+			);
+		}
+		Ok(())
 	}
 }
