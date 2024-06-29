@@ -2,6 +2,7 @@
 members = [
     "node",
     "pallets/pallet-reclaim",
+    "pallets/pallet-integration-with-reclaim",
     "runtime",
 ]
 [profile.release]

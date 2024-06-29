@@ -323,13 +323,8 @@ pub mod pallet {
 			signed_claim: SignedClaim,
 		) -> DispatchResult {
 			let _who = ensure_signed(origin)?;
-			let config = <PReclaimConfig<T>>::get().unwrap();
-			let epoch_count = config.current_epoch;
-			let current_epoch = <Epochs<T>>::get(epoch_count);
-
 			let proof = Proof { claimInfo: claim_info, signedClaim: signed_claim };
-			<Self as ReclaimVerifier<Proof, Epoch>>::verify_proof(&proof, &current_epoch)?;
-			Self::deposit_event(Event::ProofVerified { epoch_id: current_epoch.id });
+			<Self as ReclaimVerifier<Proof>>::verify_proof(&proof)?;
 			Ok(())
 		}
 
@@ -363,11 +358,15 @@ pub mod pallet {
 	}
 }
 
-impl<T> ReclaimVerifier<Proof, Epoch> for Pallet<T>
+impl<T> ReclaimVerifier<Proof> for Pallet<T>
 where
 	T: Config,
 {
-	fn verify_proof(proof: &Proof, current_epoch: &Epoch) -> DispatchResult {
+	fn verify_proof(proof: &Proof) -> DispatchResult {
+		let config = <PReclaimConfig<T>>::get().unwrap();
+		let epoch_count = config.current_epoch;
+		let current_epoch = <Epochs<T>>::get(epoch_count);
+
 		let signed_claim = proof.signedClaim.clone();
 		let hashed = proof.claimInfo.hash();
 
@@ -392,6 +391,9 @@ where
 				Error::<T>::SignatureMismatch
 			);
 		}
+
+		Self::deposit_event(Event::ProofVerified { epoch_id: current_epoch.id });
+
 		Ok(())
 	}
 }

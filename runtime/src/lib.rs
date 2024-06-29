@@ -45,9 +45,8 @@ use pallet_transaction_payment::{ConstFeeMultiplier, CurrencyAdapter, Multiplier
 pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{Perbill, Permill};
 
-/// Import the erc20 pallet.
+pub use pallet_integration_with_reclaim;
 pub use pallet_reclaim;
-pub mod weights;
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -276,7 +275,13 @@ impl pallet_reclaim::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Signature = sp_core::ecdsa::Signature;
 	type PublicKey = sp_core::ecdsa::Public;
-	type WeightInfo = weights::WeightInfo<Runtime>;
+	type WeightInfo = pallet_reclaim::weights::SubstrateWeightInfo<Runtime>;
+}
+
+impl pallet_integration_with_reclaim::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type ReclaimVerifier = pallet_reclaim::Pallet<Runtime>;
+	type WeightInfo = pallet_integration_with_reclaim::weights::SubstrateWeightInfo<Runtime>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -291,6 +296,7 @@ construct_runtime!(
 		Sudo: pallet_sudo,
 		// Include the custom logic from the pallet_reclaim in the runtime.
 		Reclaim: pallet_reclaim,
+		IntegrationWithReclaim: pallet_integration_with_reclaim,
 	}
 );
 
@@ -339,6 +345,7 @@ mod benches {
 		[pallet_timestamp, Timestamp]
 		[pallet_sudo, Sudo]
 		[pallet_reclaim, Reclaim]
+		[pallet_integration_with_reclaim, IntegrationWithReclaim]
 	);
 }
 
