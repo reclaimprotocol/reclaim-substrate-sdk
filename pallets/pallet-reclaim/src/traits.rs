@@ -1,11 +1,11 @@
 use frame_support::dispatch::DispatchResult;
 
-pub trait ReclaimVerifier<Proof, Epoch> {
-	fn verify_proof(proof: &Proof, current_epoch: &Epoch) -> DispatchResult;
+pub trait ReclaimVerifier<Proof> {
+	fn verify_proof(proof: &Proof) -> DispatchResult;
 }
 
-impl<Proof, Epoch> ReclaimVerifier<Proof, Epoch> for () {
-	fn verify_proof(_proof: &Proof, _current_epoch: &Epoch) -> DispatchResult {
+impl<Proof> ReclaimVerifier<Proof> for () {
+	fn verify_proof(_proof: &Proof) -> DispatchResult {
 		unimplemented!()
 	}
 }

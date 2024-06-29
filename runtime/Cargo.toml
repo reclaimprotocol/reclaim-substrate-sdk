@@ -49,6 +49,7 @@ frame-system-benchmarking = { version = "4.0.0-dev", default-features = false, g
 
 # Local Dependencies
 pallet-reclaim = { version = "4.0.0-dev", default-features = false, path = "../pallets/pallet-reclaim" }
+pallet-integration-with-reclaim = { version = "4.0.0-dev", default-features = false, path = "../pallets/pallet-integration-with-reclaim" }
 
 ahash = {version = "0.8.9", default-features = false}
 
@@ -99,6 +100,7 @@ runtime-benchmarks = [
 	"pallet-grandpa/runtime-benchmarks",
 	"pallet-sudo/runtime-benchmarks",
 	"pallet-reclaim/runtime-benchmarks",
+	"pallet-integration-with-reclaim/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
