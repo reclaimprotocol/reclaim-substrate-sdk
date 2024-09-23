@@ -1,4 +1,8 @@
-# Reclaim - Substrate SDK 
+<div>
+    <div>
+        <img src="https://raw.githubusercontent.com/reclaimprotocol/.github/main/assets/banners/Substrate-SDK.png"  />
+    </div>
+</div>
 
 ## Node
 
