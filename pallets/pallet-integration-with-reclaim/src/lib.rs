@@ -25,7 +25,8 @@ pub mod pallet {
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
-
+	
+	/// Configuration trait for the pallet
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
@@ -33,11 +34,13 @@ pub mod pallet {
 		type WeightInfo: WeightInfo;
 	}
 
+	/// Storage map to track verified accounts
 	#[pallet::storage]
 	#[pallet::getter(fn account_verified)]
 	pub(super) type AccountVerified<T: Config> =
 		StorageMap<_, Identity, T::AccountId, bool, OptionQuery>;
 
+	/// Events emitted by the pallet
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
@@ -50,6 +53,7 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+		/// Verifies a user based on the provided proof
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as pallet::Config>::WeightInfo::verify_user())]
 		pub fn verify_user(origin: OriginFor<T>, proof: Proof) -> DispatchResult {
