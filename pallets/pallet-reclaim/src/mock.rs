@@ -6,6 +6,7 @@ use sp_runtime::{
 	BuildStorage,
 };
 
+// Mock block type for testing
 type Block = frame_system::mocking::MockBlock<Test>;
 
 // Configure a mock runtime to test the pallet.
@@ -63,6 +64,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 	frame_system::GenesisConfig::<Test>::default().build_storage().unwrap().into()
 }
 
+// Constants for testing
 const _ZERO_ADDRESS: &str = "00000000000000000000000000000000000000000000000000000000000000";
 const _ZERO_HOST: &str = "00000000000000000000000000000000000000000000000000000000000000";
 const _MOCK_IDENTIFIER: &str = "0x27da6b2ce5887ac6a0084b57a5239f4ead79acfeab3aab84d588e907f66daf3f";
